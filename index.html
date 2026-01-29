@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Logic Proof Engine</title>
+
+<style>
+* {
+    box-sizing: border-box;
+    font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.container {
+    width: 900px;
+    max-width: 100%;
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 30px 35px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+}
+
+h2 {
+    margin-top: 0;
+    text-align: center;
+    font-weight: 700;
+    color: #333;
+}
+
+.subtitle {
+    text-align: center;
+    color: #777;
+    margin-bottom: 25px;
+}
+
+/* SYMBOL BAR */
+.symbols {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.symbol-btn {
+    background: #f1f3f7;
+    border: 1px solid #ddd;
+    padding: 6px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: 0.2s;
+}
+
+.symbol-btn:hover {
+    background: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
+/* INPUTS */
+label {
+    font-weight: 600;
+    color: #444;
+    margin-top: 15px;
+    display: block;
+}
+
+textarea,
+input[type="text"] {
+    width: 100%;
+    margin-top: 6px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid #ccc;
+    font-size: 15px;
+    font-family: monospace;
+    resize: vertical;
+}
+
+textarea {
+    height: 120px;
+}
+
+/* BUTTON */
+button {
+    width: 100%;
+    margin-top: 25px;
+    padding: 14px;
+    font-size: 17px;
+    font-weight: 600;
+    color: white;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+button:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+/* RESULT */
+#result {
+    margin-top: 30px;
+}
+
+/* STATUS */
+.status-success {
+    background: #e6f7ec;
+    color: #1e7e34;
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-weight: 600;
+    margin-bottom: 15px;
+}
+
+.status-fail {
+    background: #fdecea;
+    color: #b02a37;
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-weight: 600;
+}
+
+/* TABLE */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    font-size: 14px;
+}
+
+thead {
+    background: #f3f4f8;
+}
+
+th, td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #e5e5e5;
+}
+
+th {
+    font-weight: 700;
+    color: #444;
+}
+
+tr.premise td {
+    color: #666;
+}
+
+tr.derived td {
+    color: #222;
+}
+
+/* MOBILE */
+@media (max-width: 600px) {
+    .container {
+        padding: 20px;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+    <h2>Logic Proof Engine</h2>
+    <div class="subtitle">Automated Propositional Logic Proof Generator</div>
+
+    <div class="symbols">
+        <span class="symbol-btn" onclick="ins('->')">→ Imply</span>
+        <span class="symbol-btn" onclick="ins('v')">v Or</span>
+        <span class="symbol-btn" onclick="ins('&')">∧ And</span>
+        <span class="symbol-btn" onclick="ins('~')">¬ Not</span>
+        <span class="symbol-btn" onclick="ins('<->')">↔ Equiv</span>
+    </div>
+
+    <label>Premises (one per line)</label>
+    <textarea id="premises" placeholder="P -> Q&#10;Q -> R&#10;P"></textarea>
+
+    <label>Conclusion</label>
+    <input type="text" id="conclusion" placeholder="R">
+
+    <button onclick="solve()">Prove Conclusion</button>
+
+    <div id="result"></div>
+</div>
+
+<script>
+function ins(txt) {
+    const el = document.getElementById('premises');
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const text = el.value;
+    el.value = text.substring(0, start) + txt + text.substring(end);
+    el.selectionStart = el.selectionEnd = start + txt.length;
+    el.focus();
+}
+
+async function solve() {
+    const p = document.getElementById('premises').value;
+    const c = document.getElementById('conclusion').value;
+    const resDiv = document.getElementById('result');
+
+    resDiv.innerHTML = "Thinking...";
+
+    try {
+        const resp = await fetch('http://localhost:8081/solve', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: `premises=${encodeURIComponent(p)}&conclusion=${encodeURIComponent(c)}`
+        });
+
+        const data = await resp.json();
+
+        if (data.status === 'fail') {
+            resDiv.innerHTML = `<div class="status-fail">Could not prove the conclusion.</div>`;
+            return;
+        }
+
+        let html = `<div class="status-success">Proof Found ✔</div>
+        <table>
+        <thead>
+            <tr><th>#</th><th>Statement</th><th>Rule</th><th>Refs</th></tr>
+        </thead><tbody>`;
+
+        data.steps.forEach(s => {
+            let niceStmt = s.statement
+                .replace(/>/g, ' → ')
+                .replace(/=/g, ' ↔ ')
+                .replace(/&/g, ' ∧ ')
+                .replace(/\|/g, ' v ');
+
+            html += `<tr class="${s.rule === 'Premise' ? 'premise' : 'derived'}">
+                <td>${s.line}</td>
+                <td>${niceStmt}</td>
+                <td>${s.rule}</td>
+                <td>${s.refs}</td>
+            </tr>`;
+        });
+
+        html += "</tbody></table>";
+        resDiv.innerHTML = html;
+
+    } catch (e) {
+        resDiv.innerHTML =
+            "<div class='status-fail'>Server not running. Start logic_server.exe</div>";
+    }
+}
+</script>
+
+</body>
+</html>
